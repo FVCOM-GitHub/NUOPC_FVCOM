@@ -1437,23 +1437,6 @@
         flogr2(2,7) = .true.  !Wave dir
       endif
 
-!      i1 = FieldIndex( expFieldName, 'wavhss', rc )
-!      if (ESMF_LogFoundError(rc, PASSTHRU)) return
-!      if ( expFieldActive(i1) ) then
-!        flogr2(2,1) = .true.  !Wave height
-!      endif
-
-!      i1 = FieldIndex( expFieldName, 'wavlen', rc )
-!      if (ESMF_LogFoundError(rc, PASSTHRU)) return
-!      if ( expFieldActive(i1) ) then
-!        flogr2(2,2) = .true.  !Wave length
-!      endif
-
-!      i1 = FieldIndex( expFieldName, 'wavdir', rc )
-!      if (ESMF_LogFoundError(rc, PASSTHRU)) return
-!      if ( expFieldActive(i1) ) then
-!        flogr2(2,7) = .true.  !Wave dir
-!      endif
 !JQI20210927
 #endif
 !
@@ -6144,32 +6127,8 @@
           if ( dw(isea).le.zero ) cycle jsea_loop
 #ifdef USE_W3OUTG_FOR_EXPORT
           whsn(jsea) = hs(jsea)
-!          sxyn(jsea) = sxy(jsea)
-!          syyn(jsea) = syy(jsea)
 #else
-!          sxxs = zero
-!          sxys = zero
-!          syys = zero
-!          ik_loop: do ik = 1,nk
-!            akxx = zero
-!            akxy = zero
-!            akyy = zero
-!            cgoc = cg(ik,isea)*wn(ik,isea)/sig(ik)
-!            cgoc = min(one,max(half,cgoc))
-!            ith_loop: do ith = 1,nth
-!              akxx = akxx + (cgoc*(ec2(ith)+one)-half)*a(ith,ik,jsea)
-!              akxy = akxy + cgoc*esc(ith)*a(ith,ik,jsea)
-!              akyy = akyy + (cgoc*(es2(ith)+one)-half)*a(ith,ik,jsea)
-!            enddo ith_loop
-!            fack = dden(ik)/cg(ik,isea)
-!            sxxs = sxxs + akxx*fack
-!            sxys = sxys + akxy*fack
-!            syys = syys + akyy*fack
-!          enddo ik_loop
-!          facs = (one+fte/cg(nk,isea))*facd
           whsn(jsea) = hs(jsea)
-!          sxyn(jsea) = sxys*facs
-!          syyn(jsea) = syys*facs
 #endif
         enddo jsea_loop
 !/PDLIB      else
@@ -6318,32 +6277,7 @@
           if ( dw(isea).le.zero ) cycle jsea_loop
 #ifdef USE_W3OUTG_FOR_EXPORT
           wlmn(jsea) = wlm(jsea)
-!          sxyn(jsea) = sxy(jsea)
-!          syyn(jsea) = syy(jsea)
 #else
-!          sxxs = zero
-!          sxys = zero
-!          syys = zero
-!          ik_loop: do ik = 1,nk
-!            akxx = zero
-!            akxy = zero
-!            akyy = zero
-!            cgoc = cg(ik,isea)*wn(ik,isea)/sig(ik)
-!            cgoc = min(one,max(half,cgoc))
-!            ith_loop: do ith = 1,nth
-!              akxx = akxx + (cgoc*(ec2(ith)+one)-half)*a(ith,ik,jsea)
-!              akxy = akxy + cgoc*esc(ith)*a(ith,ik,jsea)
-!              akyy = akyy + (cgoc*(es2(ith)+one)-half)*a(ith,ik,jsea)
-!            enddo ith_loop
-!            fack = dden(ik)/cg(ik,isea)
-!            sxxs = sxxs + akxx*fack
-!            sxys = sxys + akxy*fack
-!            syys = syys + akyy*fack
-!          enddo ik_loop
-!          facs = (one+fte/cg(nk,isea))*facd
-!          sxxn(jsea) = sxxs*facs
-!          sxyn(jsea) = sxys*facs
-!          syyn(jsea) = syys*facs
            wlmn(jsea) = wlm(jsea)
 #endif
         enddo jsea_loop
@@ -6493,35 +6427,8 @@
 !/SHRD          isea = jsea
           if ( dw(isea).le.zero ) cycle jsea_loop
 #ifdef USE_W3OUTG_FOR_EXPORT
-!          sxxn(jsea) = sxx(jsea)
-!          sxyn(jsea) = sxy(jsea)
-!          syyn(jsea) = syy(jsea)
            thmn(jsea) = thm(jsea)
 #else
-!          print*, 'THM= ',THM(1),WLM(1),HS(1)
-!          sxxs = zero
-!          sxys = zero
-!          syys = zero
-!          ik_loop: do ik = 1,nk
-!            akxx = zero
-!            akxy = zero
-!            akyy = zero
-!            cgoc = cg(ik,isea)*wn(ik,isea)/sig(ik)
-!            cgoc = min(one,max(half,cgoc))
-!            ith_loop: do ith = 1,nth
-!              akxx = akxx + (cgoc*(ec2(ith)+one)-half)*a(ith,ik,jsea)
-!              akxy = akxy + cgoc*esc(ith)*a(ith,ik,jsea)
-!              akyy = akyy + (cgoc*(es2(ith)+one)-half)*a(ith,ik,jsea)
-!            enddo ith_loop
-!            fack = dden(ik)/cg(ik,isea)
-!            sxxs = sxxs + akxx*fack
-!            sxys = sxys + akxy*fack
-!            syys = syys + akyy*fack
-!          enddo ik_loop
-!          facs = (one+fte/cg(nk,isea))*facd
-!          sxxn(jsea) = sxxs*facs
-!          sxyn(jsea) = sxys*facs
-!          syyn(jsea) = syys*facs
           thmn(jsea) = thm(jsea)
 #endif
         enddo jsea_loop
