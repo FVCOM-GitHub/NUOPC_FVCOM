@@ -11,7 +11,7 @@ $(error Environment variable ESMFMKFILE was not set.)
 endif
 
 include $(ESMFMKFILE)
-include ${PETSC_DIR}/bmake/common/variables
+#include ${PETSC_DIR}/bmake/common/variables
 include ../src/make.inc
 #include	../src/libfvcom.a
  FVCOMDIR := $(ROOTDIR)/FVCOM/src

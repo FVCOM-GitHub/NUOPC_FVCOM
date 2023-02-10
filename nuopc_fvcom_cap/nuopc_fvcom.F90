@@ -4,6 +4,12 @@
 !! @date 12/20/2019 Original documentation
 !------------------------------------------------------
 !
+#define MULTIPROCESSOR
+#define WET_DRY
+#define SEMI_IMPLICIT_disabled
+#define TVD
+#define MPDATA
+
 MODULE NUOPC_FVCOM
 
   !==============================================================================!
@@ -31,6 +37,11 @@ MODULE NUOPC_FVCOM
   USE MOD_WD
   USE EQS_OF_STATE
   USE MOD_NESTING
+! Added by researchers at Akvaplan-niva 2018, idealized tests give promising results.
+# if defined (TVD)
+  USE MOD_TVD
+# endif
+
 
   !------------------------------------------------------------------------------|
   IMPLICIT NONE
@@ -59,7 +70,7 @@ MODULE NUOPC_FVCOM
   ! INTIALIZE MPI CONTROL VARIABLES
   MPI_FVCOM_GROUP = FVCOM_COMM ! FOR NOW MAKE THEM EQUAL
   MPI_COMM_FVCOM  = FVCOM_COMM ! FOR NOW MAKE THEM EQUAL
-!  print*,'MPI_COMM ',MPI_FVCOM_GROUP,MPI_COMM_FVCOM,fvcom_comm
+
   CALL INIT_MPI_ENV_ESMF(MYID,NPROCS,SERIAL,PAR,MSR,MSRID)
 
 !  MPI_FVCOM_GROUP = FVCOM_COMM ! FOR NOW MAKE THEM EQUAL
@@ -133,6 +144,11 @@ MODULE NUOPC_FVCOM
 !  print*,"GRID_METRICS"
   CALL GRID_METRICS
   
+   !SETUP TVD ADVECTION
+# if defined (TVD)
+   CALL SETUP_TVD
+# endif
+
   !==============================================================================!
   !  SETUP THE MODEL FORCING                                                     !
   !==============================================================================!
@@ -158,6 +174,8 @@ MODULE NUOPC_FVCOM
   !==============================================================================!
   
   CALL ARCHIVE
+  ! ORDER MATTERS - ARCHIVE_NEST MUST GO AFTER ARCHIVE DURING SETUP!
+  CALL ARCHIVE_NEST
 
   CALL SET_PROBES(PROBES_ON,PROBES_NUMBER,PROBES_FILE)
   IF(OUT_STATION_TIMESERIES_ON)CALL READ_STATION_FILE
@@ -165,6 +183,7 @@ MODULE NUOPC_FVCOM
   ! Setup Bounds checking (shutdown if variables exceed threshold)
   CALL SETUP_BOUNDSCHK !bounds checking
 
+  IF(OUT_STATION_TIMESERIES_ON)CALL GET_OUTPUT_FILE_INTERVAL(TRIM(OUT_INTERVAL),INTERVAL_TIME_SERIES)
   IF(OUT_STATION_TIMESERIES_ON)CALL OUT_STATION_TIMESERIES
   IF(OUT_STATION_TIMESERIES_ON) TIME_SERIES = STARTTIME + INTERVAL_TIME_SERIES
 
@@ -199,7 +218,7 @@ MODULE NUOPC_FVCOM
   SUBROUTINE NUOPC_FVCOM_run(nCplFVCOM)      
   
   USE MOD_NORTHPOLE, only : NP,NP_LST,CELL_NORTHAREA
-!  USE MOD_NESTING, ONLY : NESTING_ON, SET_VAR,NESTING_DATA
+  USE MOD_NESTING, ONLY : NESTING_ON, SET_VAR,NESTING_DATA
   USE ALL_VARS, ONLY : U, V, T1, S1
   IMPLICIT NONE
 !  TYPE(GRID), POINTER :: G1, G4
@@ -230,7 +249,9 @@ MODULE NUOPC_FVCOM
   CALL BCOND_GCN(5,0)
 
 !  print*,'EXCHANGE ',myid,nprocs,par,MPI_FVCOM_GROUP
+# if defined(MULTIPROCESSOR)
   IF(PAR)CALL AEXCHANGE(EC,MYID,NPROCS,U,V)
+# endif
 !  print*,'AFTER EXCHANGE ',myid,nprocs,par,MPI_FVCOM_GROUP
 
   !----SPECIFY THE SURFACE FORCING OF INTERNAL MODES-----------------------------!
@@ -320,7 +341,9 @@ MODULE NUOPC_FVCOM
 !==============================================================================!
     CALL VERTVL_EDGE     ! Calculate/Update Sigma Vertical Velocity (Omega)   !
 
+#   if defined (WET_DRY)
     IF(WETTING_DRYING_ON) CALL WD_UPDATE(2)
+#   endif
 
     CALL VISCOF_H        ! Calculate horizontal diffusion coefficient scalars !
   
@@ -340,6 +363,7 @@ MODULE NUOPC_FVCOM
     END IF
 !DEC2021
 
+#   if defined (WET_DRY)
     IF(WETTING_DRYING_ON)THEN
     DO I=1,N
       IF(H1(I) <= STATIC_SSH_ADJ ) THEN
@@ -350,6 +374,7 @@ MODULE NUOPC_FVCOM
       END IF
     END DO
     END IF
+#   endif
 
     CALL BCOND_GCN(3,0)    ! Boundary Condition on U/V At River Input           !
 
@@ -358,8 +383,10 @@ MODULE NUOPC_FVCOM
   !==============================================================================!
   !    TURBULENCE MODEL SECTION                                                  |
   !==============================================================================!
+# if defined (MULTIPROCESSOR)
   IF(PAR)CALL AEXCHANGE(EC,MYID,NPROCS,WUSURF,WVSURF)
   IF(PAR)CALL AEXCHANGE(EC,MYID,NPROCS,WUBOT,WVBOT)
+# endif
   
   SELECT CASE(VERTICAL_MIXING_TYPE)
   CASE('closure')
@@ -369,14 +396,18 @@ MODULE NUOPC_FVCOM
 
      CALL ADV_Q(Q2L,Q2LF) 
 
+# if defined (MULTIPROCESSOR)
      IF(PAR)CALL NODE_MATCH(1,NBN,BN_MLT,BN_LOC,BNC,MT,KB,MYID,NPROCS,Q2F)
      IF(PAR)CALL NODE_MATCH(1,NBN,BN_MLT,BN_LOC,BNC,MT,KB,MYID,NPROCS,Q2LF)
+# endif
 
      IF(SCALAR_POSITIVITY_CONTROL) CALL FCT_Q2             !Conservation Correction   !
      IF(SCALAR_POSITIVITY_CONTROL) CALL FCT_Q2L            !Conservation Correction   !
 
      CALL VDIF_Q                  !! Solve Q2,Q2*L eqns for KH/KM/KQ 
+# if defined (MULTIPROCESSOR)
      IF(PAR)CALL AEXCHANGE(NC,MYID,NPROCS,Q2F,Q2LF,L) !Interprocessor Exchange   !
+# endif
       Q2  = Q2F
       Q2L = Q2LF
 
@@ -385,7 +416,9 @@ MODULE NUOPC_FVCOM
      KH = UMOL*VPRNU
   END SELECT
 
+# if defined (MULTIPROCESSOR)
   IF(PAR)CALL AEXCHANGE(NC,MYID,NPROCS,KM,KQ,KH)
+# endif
   CALL N2E3D(KM,KM1)
 
   !==============================================================================!
@@ -395,7 +428,9 @@ MODULE NUOPC_FVCOM
      
      CALL ADV_T                                     !Advection                 !
 
+# if defined(MULTIPROCESSOR)
      IF(PAR)CALL NODE_MATCH(1,NBN,BN_MLT,BN_LOC,BNC,MT,KB,MYID,NPROCS,TF1)
+# endif
 
      !#                                                   if !defined (DOUBLE_PRECISION)
      IF(SCALAR_POSITIVITY_CONTROL) CALL FCT_T            !Conservation Correction   !
@@ -403,13 +438,19 @@ MODULE NUOPC_FVCOM
 
         CALL VDIF_TS(1,TF1)                            !Vertical Diffusion        !
 
+# if defined (MULTIPROCESSOR)
      IF(PAR)CALL AEXCHANGE(NC,MYID,NPROCS,TF1) !Interprocessor Exchange   !
+# endif
 
      CALL BCOND_TS(1)                               !Boundary Conditions       !
 
      IF(NESTING_ON )THEN
        CALL SET_VAR(intTime,T1=TF1)
      END IF
+
+!qxu{
+!    WHERE (TF1 < -2.0) TF1=-2.0_SP
+!qxu}    
 
 !     TT1 = T1
      T1 = TF1                                       !Update to new time level  !
@@ -426,7 +467,9 @@ MODULE NUOPC_FVCOM
 
      CALL ADV_S                                     !Advection                 !
 
+# if defined(MULTIPROCESSOR)
      IF(PAR)CALL NODE_MATCH(1,NBN,BN_MLT,BN_LOC,BNC,MT,KB,MYID,NPROCS,SF1)
+# endif
 
      !#                                                   if !defined (DOUBLE_PRECISION)
      IF(SCALAR_POSITIVITY_CONTROL) CALL FCT_S       !Conservation Correction   !
@@ -434,13 +477,19 @@ MODULE NUOPC_FVCOM
 
         CALL VDIF_TS(2,SF1)                            !Vertical Diffusion        !
 
+# if defined(MULTIPROCESSOR)
      IF(PAR)CALL AEXCHANGE(NC,MYID,NPROCS,SF1) !Interprocessor Exchange   !
+# endif
 
      CALL BCOND_TS(2)                               !Boundary Conditions       !
 
      IF(NESTING_ON )THEN
        CALL SET_VAR(intTime,S1=SF1)
      END IF
+
+!qxu{
+!    WHERE (SF1 < 0.0) SF1=0.0_SP
+!qxu}
 
 !     ST1 = S1
      S1 = SF1                                       !Update to new time level  !
@@ -452,9 +501,11 @@ MODULE NUOPC_FVCOM
 !==================================================================================!
 !    ADJUST TEMPERATURE AND SALINITY AT RIVER MOUTHS
 !==================================================================================!
+# if !defined (MPDATA)
   IF( RIVER_TS_SETTING == 'calculated')THEN
      CALL ADJUST_TS
   END IF
+# endif   
   
   !==============================================================================!
   !     UPDATE THE DENSITY IN NON-BAROTROPIC CASE                                |
@@ -506,6 +557,7 @@ MODULE NUOPC_FVCOM
   !    PERFORM DATA EXCHANGE FOR ELEMENT BASED INFORMATION AT PROC BNDRIES       |
   !==============================================================================!
   
+# if defined (MULTIPROCESSOR)
   IF(PAR)THEN
      CALL AEXCHANGE(EC,MYID,NPROCS,U,V)
      CALL AEXCHANGE(NC,MYID,NPROCS,Q2,Q2L)
@@ -515,6 +567,7 @@ MODULE NUOPC_FVCOM
      CALL AEXCHANGE(EC,MYID,NPROCS,VISCOFM)
      CALL AEXCHANGE(NC,MYID,NPROCS,VISCOFH)
   END IF
+# endif
 
   !
   !----SHIFT SEA SURFACE ELEVATION AND DEPTH TO CURRENT TIME LEVEL---------------!
@@ -554,6 +607,12 @@ MODULE NUOPC_FVCOM
         !  CALL BOUNDS CHECK TO SEE IF VARIABLES EXCEED USER-DEFINED THRESHOLDS 
         !==============================================================================!
         CALL BOUNDSCHK  !bounds checking
+
+        !==============================================================================!
+        !    NESTING OUTPUT                                                            !
+        !==============================================================================!
+        IF(NCNEST_ON)      CALL ARCHIVE_NEST
+
 
         IINT = IINT + 1
 	
@@ -628,7 +687,7 @@ MODULE NUOPC_FVCOM
   SUBROUTINE EXTERNAL_STEP_ESMF(split)
 
   USE ALL_VARS
-!  USE MOD_NESTING, ONLY : NESTING_ON,SET_VAR,NESTING_DATA
+  USE MOD_NESTING, ONLY : NESTING_ON,SET_VAR,NESTING_DATA
 
   IMPLICIT NONE
   REAL(SP) :: TMP
@@ -680,9 +739,9 @@ MODULE NUOPC_FVCOM
      CALL BCOND_GCN(1,K)
  
      IF(NESTING_ON)THEN
-     print*,'BEFORE NESTING ELF'
+!     print*,'BEFORE NESTING ELF'
         CALL SET_VAR(ExtTime,EL=ELF)
-     print*,'AFTER NESTING ELF'
+!     print*,'AFTER NESTING ELF'
      END IF
      
      DO I=1,IBCN(1)

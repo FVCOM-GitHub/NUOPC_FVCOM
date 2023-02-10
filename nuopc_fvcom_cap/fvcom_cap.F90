@@ -1650,7 +1650,7 @@ module fvcom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    call NUOPC_FVCOM_Final()
+!    call NUOPC_FVCOM_Final()
 
     write(info,*) subname,' --- finalize completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
@@ -1662,7 +1662,7 @@ module fvcom_cap
 !------------------------------------------------------------------------------|
    
    USE MOD_PREC
-   USE ALL_VARS, ONLY : ISBCE,DLTXC,DLTYC,IEC,IENODE,NE,RAMP,DEG2RAD,GRAV_N,D1,ZZ,D,DZ,DZ1
+   USE ALL_VARS, ONLY : ISBCE,DLTXC,DLTYC,IEC,IENODE,NE,RAMP,DEG2RAD,GRAV_N,D1,ZZ,D,DZ,DZ1,H1
    IMPLICIT NONE
 
    REAL(SP), DIMENSION(:) :: WHS,WLEN,WDIR
@@ -1726,7 +1726,8 @@ module fvcom_cap
 !
    DO I=1,MT
 !     KD(I) = MIN(WAVE_NUMBER(I)*D(I)+eps1,KDMAX)
-     KD(I) = WAVE_NUMBER(I)*D1(I)+eps1
+!JQI error     KD(I) = WAVE_NUMBER(I)*D1(I)+eps1
+     KD(I) = WAVE_NUMBER(I)*D(I)+eps1
    END DO 
    
    WHERE(KD <= KDMAX) 
@@ -1826,31 +1827,31 @@ module fvcom_cap
    IF(PAR)CALL AEXCHANGE(NC,MYID,NPROCS,SXX,SXY,SYY)   !Jianzhong
 #endif
 
-       allocate(sxx_gl(0:MGL)); sxx_gl = 0.0_sp
-       allocate(sxy_gl(0:MGL)); sxy_gl = 0.0_sp
-       allocate(syy_gl(0:MGL)); syy_gl = 0.0_sp
-       allocate(sxx_tmp(0:MT)); sxx_tmp = 0.0_sp
-       allocate(sxy_tmp(0:MT)); sxy_tmp = 0.0_sp
-       allocate(syy_tmp(0:MT)); syy_tmp = 0.0_sp
+!JQI       allocate(sxx_gl(0:MGL)); sxx_gl = 0.0_sp
+!JQI       allocate(sxy_gl(0:MGL)); sxy_gl = 0.0_sp
+!JQI       allocate(syy_gl(0:MGL)); syy_gl = 0.0_sp
+!JQI       allocate(sxx_tmp(0:MT)); sxx_tmp = 0.0_sp
+!JQI       allocate(sxy_tmp(0:MT)); sxy_tmp = 0.0_sp
+!JQI       allocate(syy_tmp(0:MT)); syy_tmp = 0.0_sp
 
-       sxx_tmp(:) = sxx(:,1)
-       sxy_tmp(:) = sxy(:,1)
-       syy_tmp(:) = syy(:,1)
+ !JQI      sxx_tmp(:) = sxx(:,1)
+!JQI       sxy_tmp(:) = sxy(:,1)
+!JQI       syy_tmp(:) = syy(:,1)
 
-       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,sxx_tmp,sxx_gl)
-       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,sxy_tmp,sxy_gl)
-       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,syy_tmp,syy_gl)
-       do i=1,mgl
-         write(700+myid,*) i,sxx_gl(i),sxy_gl(i),syy_gl(i)
-       end do
+!JQI       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,sxx_tmp,sxx_gl)
+!JQI       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,sxy_tmp,sxy_gl)
+!JQI       CALL ACOLLECT(MYID,MSRID,NPROCS,NMAP,syy_tmp,syy_gl)
+!JQI       do i=1,mgl
+!JQI         write(700+myid,*) i,sxx_gl(i),sxy_gl(i),syy_gl(i)
+!JQI       end do
 
-       deallocate(sxx_gl)
-       deallocate(sxy_gl)
-       deallocate(syy_gl)
-       deallocate(sxx_tmp)
-       deallocate(sxy_tmp)
-       deallocate(syy_tmp)
-
+!JQI       deallocate(sxx_gl)
+!JQI       deallocate(sxy_gl)
+!JQI       deallocate(syy_gl)
+!JQI       deallocate(sxx_tmp)
+!JQI       deallocate(sxy_tmp)
+!JQI       deallocate(syy_tmp)
+!JQI
 
    DO I=1,NE
      IA=IEC(I,1)
@@ -1926,10 +1927,23 @@ module fvcom_cap
 
    WAVESTRX_3D = PSXXPX + PSXYPY - PSPXPZ
    WAVESTRY_3D = PSXYPX + PSYYPY - PSPYPZ
+
+!qxu set rediation stress limit to 200 Pa 01/19/2021
+     WAVESTRX_3D = max(min(WAVESTRX_3D,200.0_SP),-200.0_SP)
+     WAVESTRY_3D = max(min(WAVESTRY_3D,200.0_SP),-200.0_SP)
+!qxu}
+
 #  if defined (WET_DRY)
    DO I = 1,NT
      WAVESTRX_3D(I,:) = WAVESTRX_3D(I,:)*ISWETC(I)
      WAVESTRY_3D(I,:) = WAVESTRY_3D(I,:)*ISWETC(I)
+
+!JQI
+     IF(H1(I) <= 0.0_sp)THEN
+       WAVESTRX_3D(I,:) = 0.0_SP
+       WAVESTRY_3D(I,:) = 0.0_SP
+     END IF
+!JQI    
      IF(ISBCE(I) == 2)THEN
        WAVESTRX_3D(I,:) = 0.0_SP
        WAVESTRY_3D(I,:) = 0.0_SP
